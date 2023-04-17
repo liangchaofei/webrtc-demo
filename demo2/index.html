@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Real-time Speech-to-Text</title>
+</head>
+<body>
+  <h1>Real-time Speech-to-Text</h1>
+
+  <p>Click the "Start Transcription" button to begin real-time speech-to-text.</p>
+
+  <button id="start-btn">Start Transcription</button>
+
+  <div id="results"></div>
+
+  <script>
+    const startBtn = document.getElementById('start-btn');
+    const resultsDiv = document.getElementById('results');
+
+    const WS_URL = 'ws://localhost:8080';
+
+    let ws = null;
+
+    startBtn.addEventListener('click', () => {
+      startBtn.disabled = true;
+
+      ws = new WebSocket(WS_URL);
+      ws.addEventListener('open', () => {
+        console.log('WebSocket connected');
+      });
+      ws.addEventListener('message', event => {
+        resultsDiv.innerHTML = event.data;
+      });
+      ws.addEventListener('close', () => {
+        console.log('WebSocket disconnected');
+      });
+
+      const recognition = new webkitSpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onresult = event => {
+        const result = event.results[event.resultIndex];
+        const transcript = result[0].transcript;
+
+        if (result.isFinal) {
+          ws.send(transcript);
+        }
+
+        resultsDiv.innerHTML = transcript;
+      };
+
+      recognition.onerror = event => {
+        console.error(event.error);
+      };
+
+      recognition.onend = () => {
+        console.log('Speech recognition ended');
+        ws.close();
+        startBtn.disabled = false;
+      };
+
+      recognition.start();
+    });
+  </script>
+</body>
+</html>

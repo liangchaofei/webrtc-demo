@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>WebRTC Speech-to-Text Demo</title>
+    <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+  </head>
+  <body>
+    <div>
+      <h2>Recognition Results:</h2>
+      <ul id="resultList"></ul>
+    </div>
+    <script>
+      const resultList = document.getElementById('resultList');
+
+      const onResult = (event) => {
+        const text = event.results[0][0].transcript;
+        const isFinal = event.results[0].isFinal;
+        if (isFinal) {
+          resultList.innerHTML += `<li><strong>${text}</strong></li>`;
+        } else {
+          resultList.innerHTML += `<li>${text}</li>`;
+        }
+      };
+
+      const onError = (error) => {
+        console.error(`Recognition error: ${error}`);
+      };
+
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then((stream) => {
+          const recognition = new webkitSpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.onresult = onResult;
+          recognition.onerror = onError;
+          recognition.start();
+
+          const audioContext = new AudioContext();
+          const input = audioContext.createMediaStreamSource(stream);
+          const processor = audioContext.createScriptProcessor(1024, 1, 1);
+          const analyser = audioContext.createAnalyser();
+
+          input.connect(processor);
+          processor.connect(analyser);
+          analyser.connect(audioContext.destination);
+
+          let buffer = [];
+          let threshold = 30;
+
+          processor.onaudioprocess = (event) => {
+            const inputBuffer = event.inputBuffer.getChannelData(0);
+            const outputBuffer = event.outputBuffer.getChannelData(0);
+            for (let i = 0; i < inputBuffer.length; i++) {
+              outputBuffer[i] = inputBuffer[i];
+              buffer.push(outputBuffer[i]);
+            }
+            while (buffer.length > 1024) {
+              const segment = buffer.splice(0, 1024);
+              const rms = Math.sqrt(segment.reduce((sum, x) => sum + x * x, 0) / segment.length);
+              if (rms > threshold) {
+                const data = new Blob([new Int16Array(segment)], { type: 'audio/wav' });
+                const reader = new FileReader();
+                reader.readAsDataURL(data);
+                reader.onloadend = () => {
+                  wss.send(reader.result);
+                };
+              }
+            }
+          };
+        })
+        .catch((error) => {
+          console.error(`Media device error: ${error}`);
+        });
+    </script>
+  </body>
+</html>
